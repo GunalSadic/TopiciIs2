@@ -1,0 +1,119 @@
+{
+  "products": [
+    {
+      "id": "prod_001",
+      "name": "Dressing dormitor de colt Stejar Auriu",
+      "category": "wardrobe",
+      "subcategory": "corner_wardrobe",
+      "price": 1299.99,
+      "currency": "RON",
+      "description": "Dressing dormitor de colt Stejar Auriu este soluția ideală pentru cei care doresc să îmbine utilitatea cu estetica într-un dormitor modern. Conceput special pentru a valorifica spațiul din colțul camerei, acesta transformă fiecare centimetru într-o oportunitate de depozitare inteligentă.",
+      "styles": ["Modern", "Minimalist"],
+      "materials": ["Wood", "Oak"],
+      "colors": ["White", "White with Grey", "Golden Oak"],
+      "dimensions": {
+        "width": "86.8-89 cm",
+        "depth": "48 cm",
+        "height": "192.5 cm"
+      },
+      "image_url": "https://i0.wp.com/mobidea.ro/wp-content/uploads/2026/03/colt-stejar.jpg?w=1200&ssl=1",
+      "store": "Mobidea",
+      "product_url": "https://mobidea.ro/p/dressing-dormitor-de-colt-stejar-auriu-868-89-cm/",
+      "in_stock": true,
+      "rating": 4.5,
+      "reviews": 12
+    },
+    {
+      "id": "prod_002",
+      "name": "Corp suspendat cu polite Stejar Auriu - Tudor",
+      "category": "cabinet",
+      "subcategory": "suspended_cabinet",
+      "price": 899.50,
+      "currency": "RON",
+      "description": "Corp suspendat cu polite Stejar Auriu – Tudor este soluția ideală pentru optimizarea spațiului din dormitor. Cu un design modern și funcțional, acest element de mobilier combină perfect spațiul de depozitare închis cu rafturile deschise.",
+      "styles": ["Modern", "Contemporary"],
+      "materials": ["Wood", "Oak"],
+      "colors": ["White", "White with Grey", "K03"],
+      "dimensions": {
+        "width": "167 cm",
+        "depth": "30.4 cm",
+        "height": "69 cm"
+      },
+      "image_url": "https://i0.wp.com/mobidea.ro/wp-content/uploads/2025/03/SUSPENDAT_K003.jpg?w=1200&ssl=1",
+      "store": "Mobidea",
+      "product_url": "https://mobidea.ro/p/corp-suspendat-cu-polite-stejar-auriu-tudor/",
+      "in_stock": true,
+      "rating": 4.7,
+      "reviews": 18
+    },
+    {
+      "id": "prod_003",
+      "name": "Pat Tossino 160x200 cm - Catifea Gri",
+      "category": "bed",
+      "subcategory": "upholstered_bed",
+      "price": 1599.99,
+      "currency": "RON",
+      "description": "Patul Tossino este piesa centrala a dormitorului tau. Construit cu atentie la detalii si materiale de calitate, acesta ofera sustinere pentru un somn odihnitor. Cu o somiera inclusa, tapitat cu catifea de inalta calitate de nuanta gri.",
+      "styles": ["Modern", "Minimalist", "Scandinavian"],
+      "materials": ["Velvet Upholstery", "Wood Frame"],
+      "colors": ["Grey"],
+      "dimensions": {
+        "width": "160 cm",
+        "length": "200 cm",
+        "height": "approx. 50 cm"
+      },
+      "image_url": "https://s13emagst.akamaized.net/products/62893/62892144/images/res_18b4195e88ee0855db3a1c7eae103925.jpg?width=720&height=720&hash=4CBC9FA7DC8F753FE4D861538B1CE9C1",
+      "store": "eMAG",
+      "product_url": "https://www.emag.ro/pat-tossino-160x200-cm-tapitat-catifea-gri-somiera-inclusa-marketmob-xds-l17-160grey/pd/D5933DYBM/",
+      "in_stock": true,
+      "rating": 4.6,
+      "reviews": 45
+    },
+    {
+      "id": "prod_004",
+      "name": "Canapea moderna piele sintetica neagra",
+      "category": "sofa",
+      "subcategory": "modern_sofa",
+      "price": 2199.00,
+      "currency": "RON",
+      "description": "Canapea moderna cu design elegant, tapitata in piele sintetica de inalta calitate. Ideala pentru living-uri moderne cu suficient spatiu.",
+      "styles": ["Modern", "Luxury"],
+      "materials": ["Synthetic Leather", "Wood Frame"],
+      "colors": ["Black"],
+      "dimensions": {
+        "width": "220 cm",
+        "depth": "90 cm",
+        "height": "80 cm"
+      },
+      "image_url": "https://placeholder.com/sofa-black.jpg",
+      "store": "Mobidea",
+      "product_url": "https://mobidea.ro/p/canapea-moderna-piele-sintetica/",
+      "in_stock": true,
+      "rating": 4.4,
+      "reviews": 28
+    },
+    {
+      "id": "prod_005",
+      "name": "Masa de cafea minimalista lemn natural",
+      "category": "table",
+      "subcategory": "coffee_table",
+      "price": 449.99,
+      "currency": "RON",
+      "description": "Masa de cafea cu design minimalist, realizata din lemn natural. Perfect pentru completarea unui living modern.",
+      "styles": ["Minimalist", "Scandinavian", "Modern"],
+      "materials": ["Natural Wood", "Oak"],
+      "colors": ["Natural Wood", "Light Oak"],
+      "dimensions": {
+        "width": "100 cm",
+        "depth": "60 cm",
+        "height": "45 cm"
+      },
+      "image_url": "https://placeholder.com/table-wood.jpg",
+      "store": "eMAG",
+      "product_url": "https://www.emag.ro/masa-de-cafea/",
+      "in_stock": true,
+      "rating": 4.5,
+      "reviews": 22
+    }
+  ]
+}

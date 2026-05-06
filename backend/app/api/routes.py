@@ -4,13 +4,15 @@ FastAPI route definitions.
 POST /api/upload          — upload image, run Vision Analyzer (Agent 1), return analysis
 POST /api/generate-design — take analysis + style prefs, run Designer (Agent 2), return render
 GET  /api/job/{job_id}    — poll job status
+GET  /api/products        — search products with filters
+GET  /api/products/stats  — get product catalog statistics
 """
 from __future__ import annotations
 
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import JSONResponse
 
 from app.models.schemas import (
@@ -21,6 +23,8 @@ from app.models.schemas import (
     ErrorResponse,
     GraphState,
     JobStatus,
+    ProductSearchRequest,
+    ProductSearchResponse,
 )
 from app.services.graph import run_design_pipeline
 from app.services.storage import job_store
@@ -173,3 +177,100 @@ async def get_job(job_id: UUID):
         design_proposal=state.design_proposal,
         status=state.status,
     )
+
+
+# ---------------------------------------------------------------------------
+# Market Agent Routes — Product Search & Recommendations
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/products",
+    response_model=ProductSearchResponse,
+    summary="Search products with filters",
+    tags=["Market Agent"],
+)
+async def search_products(
+    category: str | None = Query(None, description="Product category (sofa, bed, table, etc.)"),
+    style: str | None = Query(None, description="Design style (Modern, Minimalist, etc.)"),
+    max_price: float | None = Query(None, description="Maximum price in RON"),
+    search_term: str | None = Query(None, description="Search term (name, description)"),
+):
+    """
+    Search products by category, style, price, and keywords.
+    
+    Example: GET /api/products?category=sofa&style=Modern&max_price=2500
+    """
+    from app.agents.market_agent import get_product_service
+    
+    service = get_product_service()
+    request = ProductSearchRequest(
+        category=category,
+        style=style,
+        max_price=max_price,
+        search_term=search_term,
+    )
+    
+    return service.search(request)
+
+
+@router.get(
+    "/products/by-category/{category}",
+    response_model=list,
+    summary="Get all products in a category",
+    tags=["Market Agent"],
+)
+async def get_products_by_category(category: str):
+    """Get all products in a specific category."""
+    from app.agents.market_agent import get_product_service
+    
+    service = get_product_service()
+    products = service.search_by_category(category)
+    
+    return [p.model_dump() for p in products]
+
+
+@router.get(
+    "/products/by-style/{style}",
+    response_model=list,
+    summary="Get all products with a specific style",
+    tags=["Market Agent"],
+)
+async def get_products_by_style(style: str):
+    """Get all products matching a design style."""
+    from app.agents.market_agent import get_product_service
+    
+    service = get_product_service()
+    products = service.search_by_style(style)
+    
+    return [p.model_dump() for p in products]
+
+
+@router.get(
+    "/products/{product_id}",
+    summary="Get a single product by ID",
+    tags=["Market Agent"],
+)
+async def get_product(product_id: str):
+    """Get detailed information about a specific product."""
+    from app.agents.market_agent import get_product_service
+    
+    service = get_product_service()
+    product = service.get_product(product_id)
+    
+    if not product:
+        raise HTTPException(status_code=404, detail=f"Product {product_id} not found.")
+    
+    return product.model_dump()
+
+
+@router.get(
+    "/products/stats/catalog",
+    summary="Get product catalog statistics",
+    tags=["Market Agent"],
+)
+async def get_products_stats():
+    """Get statistics about the product catalog (total, categories, styles, price range)."""
+    from app.agents.market_agent import get_product_service
+    
+    service = get_product_service()
+    return service.get_stats()
