@@ -31,6 +31,63 @@ class JobStatus(str, Enum):
     FAILED = "failed"
 
 
+class ProductCategory(str, Enum):
+    SOFA = "sofa"
+    BED = "bed"
+    TABLE = "table"
+    CHAIR = "chair"
+    CABINET = "cabinet"
+    WARDROBE = "wardrobe"
+    DESK = "desk"
+    SHELF = "shelf"
+    LAMP = "lamp"
+    DECOR = "decor"
+
+
+# ---------------------------------------------------------------------------
+# Market Agent - Product Models
+# ---------------------------------------------------------------------------
+
+class ProductDimensions(BaseModel):
+    width: str = ""
+    depth: str = ""
+    height: str = ""
+    length: str = ""
+
+
+class Product(BaseModel):
+    id: str
+    name: str
+    category: ProductCategory | str  # Allow string for flexibility
+    subcategory: str = ""
+    price: float
+    currency: str = "RON"
+    description: str = ""
+    styles: list[str] = Field(default_factory=list)  # Modern, Minimalist, Luxury, etc.
+    materials: list[str] = Field(default_factory=list)
+    colors: list[str] = Field(default_factory=list)
+    dimensions: ProductDimensions = Field(default_factory=ProductDimensions)
+    image_url: str
+    store: str  # Mobidea, eMAG, SomProduct, etc.
+    product_url: str
+    in_stock: bool = True
+    rating: float = 0.0
+    reviews: int = 0
+
+
+class ProductSearchRequest(BaseModel):
+    category: str | None = None
+    style: str | None = None
+    max_price: float | None = None
+    search_term: str | None = None
+
+
+class ProductSearchResponse(BaseModel):
+    products: list[Product]
+    total: int
+    query: dict[str, Any] = Field(default_factory=dict)
+
+
 # ---------------------------------------------------------------------------
 # LangGraph state (passed between agents)
 # ---------------------------------------------------------------------------

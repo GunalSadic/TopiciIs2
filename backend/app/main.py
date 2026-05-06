@@ -46,6 +46,14 @@ def create_app() -> FastAPI:
 
     app.include_router(router)
 
+    @app.on_event("startup")
+    async def startup_event():
+        """Initialize services on startup."""
+        logger.info("Initializing ProductService...")
+        from app.agents.market_agent import initialize_product_service
+        initialize_product_service()
+        logger.info("ProductService initialized")
+
     @app.get("/health", tags=["ops"])
     async def health():
         return {"status": "ok", "service": "roomrevive-ai"}
