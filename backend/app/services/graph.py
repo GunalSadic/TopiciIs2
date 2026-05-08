@@ -1,16 +1,16 @@
 """
-LangGraph orchestration — wires Agent 1 → Agent 2 with conditional edge
-for error short-circuiting.
+LangGraph orchestration — Sourcing-First Iterative Pipeline:
 
-LangGraph 1.0 API notes
-------------------------
-* START must be imported explicitly from langgraph.graph.
-* set_entry_point() is removed — use add_edge(START, node_name) instead.
-* StateGraph accepts a Pydantic BaseModel as the state schema.
-* ainvoke() returns a plain dict whose keys mirror GraphState fields;
-  we reconstruct the Pydantic model from it.
-* Nodes must return a *dict of updates* (not the full model) so LangGraph
-  can merge them into the running state via model_validate / __or__.
+  Vision Analyzer → Design Planner → Market Agent → Iterative Renderer
+
+The flow:
+  1. Vision Analyzer (GPT-4o): Analyzes the room photo, detects furniture
+  2. Design Planner (GPT-4o): Looks at the image + analysis, picks 3 items
+     to replace with detailed descriptions
+  3. Market Agent: Searches Romanian stores for matching products,
+     downloads their images
+  4. Iterative Renderer (gpt-image-1): Edits the ORIGINAL room photo
+     one product at a time, then adds AI decor
 """
 from __future__ import annotations
 
@@ -20,7 +20,9 @@ from typing import Any, Literal
 from langgraph.graph import END, START, StateGraph
 
 from app.agents.vision_analyzer import vision_analyzer_node
-from app.agents.interior_designer import interior_designer_node
+from app.agents.design_planner import design_planner_node
+from app.agents.market_agent import market_sourcing_node
+from app.agents.iterative_renderer import iterative_renderer_node
 from app.models.schemas import GraphState, JobStatus
 
 logger = logging.getLogger(__name__)
@@ -30,62 +32,83 @@ logger = logging.getLogger(__name__)
 # Node wrappers — LangGraph 1.0 nodes must return dict[str, Any] updates
 # ---------------------------------------------------------------------------
 
-def _vision_analyzer_wrapper(state: GraphState) -> dict[str, Any]:
-    """Run Agent 1 and return only the fields that changed."""
+def _vision_wrapper(state: GraphState) -> dict[str, Any]:
     updated = vision_analyzer_node(state)
     return updated.model_dump()
 
 
-def _interior_designer_wrapper(state: GraphState) -> dict[str, Any]:
-    """Run Agent 2 and return only the fields that changed."""
-    updated = interior_designer_node(state)
+def _planner_wrapper(state: GraphState) -> dict[str, Any]:
+    updated = design_planner_node(state)
+    return updated.model_dump()
+
+
+def _market_wrapper(state: GraphState) -> dict[str, Any]:
+    updated = market_sourcing_node(state)
+    return updated.model_dump()
+
+
+def _renderer_wrapper(state: GraphState) -> dict[str, Any]:
+    updated = iterative_renderer_node(state)
     return updated.model_dump()
 
 
 # ---------------------------------------------------------------------------
-# Conditional edge — bail out early if Agent 1 failed
+# Conditional edges — bail out on failure
 # ---------------------------------------------------------------------------
 
-def should_continue(state: GraphState) -> Literal["design", "end"]:
+def _after_vision(state: GraphState) -> Literal["plan", "end"]:
     if state.status == JobStatus.FAILED:
-        logger.warning("Graph short-circuit — Agent 1 failed (job=%s)", state.job_id)
+        logger.warning("Graph short-circuit — Vision Analyzer failed (job=%s)", state.job_id)
         return "end"
-    return "design"
+    return "plan"
+
+
+def _after_planner(state: GraphState) -> Literal["source", "end"]:
+    if state.status == JobStatus.FAILED:
+        logger.warning("Graph short-circuit — Design Planner failed (job=%s)", state.job_id)
+        return "end"
+    return "source"
 
 
 # ---------------------------------------------------------------------------
-# Build and compile the graph (called once at startup)
+# Build and compile the graph
 # ---------------------------------------------------------------------------
 
 def build_graph():
     """
     Graph topology:
-        [START] → vision_analyzer → <conditional> → interior_designer → [END]
-                                          ↓ (on failure)
-                                        [END]
+        [START] → vision → <ok?> → planner → <ok?> → market → renderer → [END]
+                            ↓                  ↓
+                          [END]              [END]
     """
     graph = StateGraph(GraphState)
 
-    graph.add_node("vision_analyzer", _vision_analyzer_wrapper)
-    graph.add_node("interior_designer", _interior_designer_wrapper)
+    graph.add_node("vision_analyzer", _vision_wrapper)
+    graph.add_node("design_planner", _planner_wrapper)
+    graph.add_node("market_sourcing", _market_wrapper)
+    graph.add_node("iterative_renderer", _renderer_wrapper)
 
-    # LangGraph 1.0: use add_edge(START, ...) — set_entry_point() is gone
     graph.add_edge(START, "vision_analyzer")
 
     graph.add_conditional_edges(
         "vision_analyzer",
-        should_continue,
-        {
-            "design": "interior_designer",
-            "end": END,
-        },
+        _after_vision,
+        {"plan": "design_planner", "end": END},
     )
-    graph.add_edge("interior_designer", END)
+
+    graph.add_conditional_edges(
+        "design_planner",
+        _after_planner,
+        {"source": "market_sourcing", "end": END},
+    )
+
+    graph.add_edge("market_sourcing", "iterative_renderer")
+    graph.add_edge("iterative_renderer", END)
 
     return graph.compile()
 
 
-# Singleton — compile once on first use, reuse across requests
+# Singleton
 _compiled_graph = None
 
 
@@ -93,7 +116,7 @@ def get_graph():
     global _compiled_graph
     if _compiled_graph is None:
         _compiled_graph = build_graph()
-        logger.info("LangGraph 1.0 graph compiled and ready")
+        logger.info("LangGraph pipeline compiled: Vision → Planner → Market → Renderer")
     return _compiled_graph
 
 
@@ -102,12 +125,7 @@ def get_graph():
 # ---------------------------------------------------------------------------
 
 async def run_design_pipeline(initial_state: GraphState) -> GraphState:
-    """
-    Invoke the compiled graph asynchronously.
-    ainvoke() returns a plain dict — reconstruct the typed model.
-    """
     graph = get_graph()
-    # Pass as dict so LangGraph can validate via GraphState.__init__
     result_dict: dict[str, Any] = await graph.ainvoke(
         initial_state.model_dump(mode="json")
     )

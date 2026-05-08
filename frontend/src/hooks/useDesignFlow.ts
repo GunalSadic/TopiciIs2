@@ -1,19 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import { uploadRoom, generateDesign } from "@/lib/api";
+import { uploadRoom, sourceProducts, renderDesign, smartReplace } from "@/lib/api";
 import type {
   AnalysisResponse,
   DesignResponse,
   DesignStyle,
+  SourcingResponse,
 } from "@/types";
 
-type Step = "idle" | "uploading" | "selecting" | "generating" | "done" | "error";
+type Step =
+  | "idle"
+  | "uploading"
+  | "selecting"
+  | "sourcing"      // Plan + Market (web search)
+  | "previewing"    // User reviews sourced products before rendering
+  | "rendering"     // Iterative renderer running
+  | "done"
+  | "replacing"
+  | "error";
 
 export function useDesignFlow() {
   const [step, setStep] = useState<Step>("idle");
   const [error, setError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
+  const [sourcing, setSourcing] = useState<SourcingResponse | null>(null);
   const [result, setResult] = useState<DesignResponse | null>(null);
   const [keepList, setKeepList] = useState<Set<string>>(new Set());
 
@@ -23,7 +34,6 @@ export function useDesignFlow() {
     try {
       const resp = await uploadRoom(file);
       setAnalysis(resp);
-      // Pre-select all "good" furniture for keeping
       const defaults = resp.room_analysis.detected_furniture
         .filter((f) => f.keep && f.condition !== "poor")
         .map((f) => f.name);
@@ -43,21 +53,58 @@ export function useDesignFlow() {
     });
   }
 
-  async function handleGenerate(style: DesignStyle, notes: string) {
+  /** Step 2A — Plan + Source products (web search). Shows preview. */
+  async function handleSourceProducts(style: DesignStyle, notes: string, maxBudget?: number) {
     if (!analysis) return;
-    setStep("generating");
+    setStep("sourcing");
     setError(null);
     try {
-      const resp = await generateDesign(
+      const resp = await sourceProducts(
         analysis.job_id,
         style,
         Array.from(keepList),
-        notes
+        notes,
+        maxBudget
       );
+      setSourcing(resp);
+      setStep("previewing");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Sourcing failed");
+      setStep("error");
+    }
+  }
+
+  /** Step 2B — User confirmed products, now render. */
+  async function handleConfirmAndRender() {
+    if (!sourcing) return;
+    setStep("rendering");
+    setError(null);
+    try {
+      const resp = await renderDesign(sourcing.job_id);
       setResult(resp);
       setStep("done");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Generation failed");
+      setError(e instanceof Error ? e.message : "Rendering failed");
+      setStep("error");
+    }
+  }
+
+  /** Go back from preview to selecting (re-do sourcing with different params) */
+  function handleBackToSelecting() {
+    setSourcing(null);
+    setStep("selecting");
+  }
+
+  async function handleSmartReplace(slot: string, newProductId: string) {
+    if (!result) return;
+    setStep("replacing");
+    setError(null);
+    try {
+      const resp = await smartReplace(result.job_id, slot, newProductId);
+      setResult(resp);
+      setStep("done");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Smart Replace failed");
       setStep("error");
     }
   }
@@ -66,6 +113,7 @@ export function useDesignFlow() {
     setStep("idle");
     setError(null);
     setAnalysis(null);
+    setSourcing(null);
     setResult(null);
     setKeepList(new Set());
   }
@@ -74,11 +122,15 @@ export function useDesignFlow() {
     step,
     error,
     analysis,
+    sourcing,
     result,
     keepList,
     handleUpload,
     toggleKeep,
-    handleGenerate,
+    handleSourceProducts,
+    handleConfirmAndRender,
+    handleBackToSelecting,
+    handleSmartReplace,
     reset,
   };
 }

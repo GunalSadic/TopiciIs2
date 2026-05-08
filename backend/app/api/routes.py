@@ -23,8 +23,11 @@ from app.models.schemas import (
     ErrorResponse,
     GraphState,
     JobStatus,
+    MatchedProduct,
     ProductSearchRequest,
     ProductSearchResponse,
+    SmartReplaceRequest,
+    SourcingResponse,
 )
 from app.services.graph import run_design_pipeline
 from app.services.storage import job_store
@@ -90,16 +93,17 @@ async def upload_room(
 
 
 @router.post(
-    "/generate-design",
-    response_model=DesignResponse,
-    summary="Generate redesign render (Agent 2)",
+    "/source-products",
+    response_model=SourcingResponse,
+    summary="Plan + Source: Design Planner → Market Agent (web search). Returns sourced products for preview.",
     responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
 )
-async def generate_design(request: DesignRequest, job_id: UUID):
+async def source_products(request: DesignRequest, job_id: UUID):
     """
-    Takes the job_id from /upload plus user style preferences.
-    Runs Agent 2 (Interior Designer + DALL-E 3) synchronously.
-    For production, move Agent 2 to a background task and use polling.
+    Step 2A — Takes the job_id from /upload plus user style preferences.
+    Runs: Design Planner → Market Agent (web search sourcing).
+    Returns the sourced products (with images, prices, links) for user confirmation
+    BEFORE rendering. User can review and then call /render-design.
     """
     state = await job_store.get(job_id)
     if state is None:
@@ -109,10 +113,51 @@ async def generate_design(request: DesignRequest, job_id: UUID):
     state.desired_style = request.desired_style
     state.furniture_to_keep = request.furniture_to_keep
     state.user_notes = request.user_notes
+    state.max_budget = request.max_budget
 
-    # Run Agent 2
-    from app.agents.interior_designer import interior_designer_node
-    state = interior_designer_node(state)
+    # Step 1: Design Planner — create redesign plan
+    from app.agents.design_planner import design_planner_node
+    state = design_planner_node(state)
+
+    if state.status == JobStatus.FAILED:
+        await job_store.save(state)
+        raise HTTPException(status_code=500, detail=state.error)
+
+    # Step 2: Market Agent — source real products via web search
+    from app.agents.market_agent import market_sourcing_node
+    state = market_sourcing_node(state)
+    await job_store.save(state)
+
+    return SourcingResponse(
+        job_id=state.job_id,
+        room_analysis=state.room_analysis,
+        design_plan=state.design_plan,
+        sourced_products=state.sourced_products,
+        status=state.status,
+    )
+
+
+@router.post(
+    "/render-design",
+    response_model=DesignResponse,
+    summary="Render: Iterative Renderer (gpt-image-1). Call after /source-products.",
+    responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+)
+async def render_design(job_id: UUID):
+    """
+    Step 2B — Takes the job_id from /source-products (after user confirmed the products).
+    Runs the Iterative Renderer only — edits original image one product at a time.
+    """
+    state = await job_store.get(job_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+
+    if not state.sourced_products:
+        raise HTTPException(status_code=400, detail="No sourced products. Call /source-products first.")
+
+    # Run Iterative Renderer — edit original image one product at a time
+    from app.agents.iterative_renderer import iterative_renderer_node
+    state = iterative_renderer_node(state)
     await job_store.save(state)
 
     if state.status == JobStatus.FAILED:
@@ -122,6 +167,54 @@ async def generate_design(request: DesignRequest, job_id: UUID):
         job_id=state.job_id,
         room_analysis=state.room_analysis,
         design_proposal=state.design_proposal,
+        sourced_products=state.sourced_products,
+        alternative_products=state.alternative_products,
+        status=state.status,
+    )
+
+
+@router.post(
+    "/generate-design",
+    response_model=DesignResponse,
+    summary="(Legacy) Full pipeline: Planner → Market → Renderer in one call",
+    responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+)
+async def generate_design(request: DesignRequest, job_id: UUID):
+    """
+    Legacy endpoint — runs the full pipeline in one call (no preview step).
+    Prefer /source-products + /render-design for the two-step flow.
+    """
+    state = await job_store.get(job_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+
+    state.desired_style = request.desired_style
+    state.furniture_to_keep = request.furniture_to_keep
+    state.user_notes = request.user_notes
+    state.max_budget = request.max_budget
+
+    from app.agents.design_planner import design_planner_node
+    state = design_planner_node(state)
+    if state.status == JobStatus.FAILED:
+        await job_store.save(state)
+        raise HTTPException(status_code=500, detail=state.error)
+
+    from app.agents.market_agent import market_sourcing_node
+    state = market_sourcing_node(state)
+
+    from app.agents.iterative_renderer import iterative_renderer_node
+    state = iterative_renderer_node(state)
+    await job_store.save(state)
+
+    if state.status == JobStatus.FAILED:
+        raise HTTPException(status_code=500, detail=state.error)
+
+    return DesignResponse(
+        job_id=state.job_id,
+        room_analysis=state.room_analysis,
+        design_proposal=state.design_proposal,
+        sourced_products=state.sourced_products,
+        alternative_products=state.alternative_products,
         status=state.status,
     )
 
@@ -175,6 +268,82 @@ async def get_job(job_id: UUID):
         job_id=state.job_id,
         room_analysis=state.room_analysis,
         design_proposal=state.design_proposal,
+        sourced_products=state.sourced_products,
+        alternative_products=state.alternative_products,
+        status=state.status,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Smart Replace — swap a single product and re-render
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/smart-replace",
+    response_model=DesignResponse,
+    summary="Smart Replace: swap one product and re-render",
+    responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+    tags=["Smart Replace"],
+)
+async def smart_replace(request: SmartReplaceRequest, job_id: UUID):
+    """
+    Swap a single product in the current design and re-render.
+    The user selects a new product for a specific slot (e.g. replace the sofa).
+    Only the target slot is conceptually replaced; the rest of the design stays.
+
+    This is the core "Interactive Inpainting" feature — currently uses DALL-E 3
+    full re-render with updated product context. Future: SAM2 + Stable Diffusion
+    inpainting for targeted pixel-level replacement.
+    """
+    state = await job_store.get(job_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+
+    # Find the new product
+    from app.agents.market_agent import get_product_service
+    service = get_product_service()
+    new_product = service.get_product(request.new_product_id)
+    if not new_product:
+        raise HTTPException(status_code=404, detail=f"Product {request.new_product_id} not found.")
+
+    # Create the replacement MatchedProduct
+    replacement = MatchedProduct(
+        product_id=new_product.id,
+        name=new_product.name,
+        category=str(new_product.category),
+        price=new_product.price,
+        currency=new_product.currency,
+        image_url=new_product.image_url,
+        product_url=new_product.product_url,
+        store=new_product.store,
+        slot=request.slot,
+    )
+
+    # Swap in the sourced products list
+    updated_products = [
+        replacement if p.slot == request.slot else p
+        for p in state.sourced_products
+    ]
+    # If slot didn't exist, add it
+    if not any(p.slot == request.slot for p in state.sourced_products):
+        updated_products.append(replacement)
+
+    state.sourced_products = updated_products
+
+    # Re-render with updated product list
+    from app.agents.iterative_renderer import iterative_renderer_node
+    state = iterative_renderer_node(state)
+    await job_store.save(state)
+
+    if state.status == JobStatus.FAILED:
+        raise HTTPException(status_code=500, detail=state.error)
+
+    return DesignResponse(
+        job_id=state.job_id,
+        room_analysis=state.room_analysis,
+        design_proposal=state.design_proposal,
+        sourced_products=state.sourced_products,
+        alternative_products=state.alternative_products,
         status=state.status,
     )
 
