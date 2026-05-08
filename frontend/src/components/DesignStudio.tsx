@@ -6,6 +6,7 @@ import { useDesignFlow } from "@/hooks/useDesignFlow";
 import ImageDropzone from "@/components/ui/ImageDropzone";
 import FurnitureChecklist from "@/components/ui/FurnitureChecklist";
 import StyleSelector from "@/components/ui/StyleSelector";
+import ProductPreview from "@/components/ui/ProductPreview";
 import ResultCard from "@/components/ui/ResultCard";
 import Spinner from "@/components/ui/Spinner";
 
@@ -14,26 +15,34 @@ export default function DesignStudio() {
     step,
     error,
     analysis,
+    sourcing,
     result,
     keepList,
     handleUpload,
     toggleKeep,
-    handleGenerate,
+    handleSourceProducts,
+    handleConfirmAndRender,
+    handleBackToSelecting,
+    handleSmartReplace,
     reset,
   } = useDesignFlow();
 
   const [style, setStyle] = useState<DesignStyle>("Modern");
   const [notes, setNotes] = useState("");
+  const [budget, setBudget] = useState<string>("");
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-10 space-y-8">
+    <div className="max-w-3xl mx-auto px-4 py-10 space-y-8">
       {/* Header */}
       <div className="text-center space-y-2">
         <h1 className="text-3xl font-bold text-zinc-900 tracking-tight">
-          RoomRevive <span className="text-violet-600">AI</span>
+          AuraDesign <span className="text-violet-600">RO</span>
         </h1>
         <p className="text-zinc-500 text-sm">
-          Upload your room · choose what to keep · pick a style · get a render
+          Vizualizeaza Viitorul. Cumpara Local. Traieste Frumos.
+        </p>
+        <p className="text-zinc-400 text-xs">
+          Upload your room · choose what to keep · pick a style · preview real products · get a render
         </p>
       </div>
 
@@ -48,7 +57,7 @@ export default function DesignStudio() {
             disabled={step === "uploading"}
           />
           {step === "uploading" && (
-            <Spinner label="Analyzing your room with GPT-4o Vision…" />
+            <Spinner label="Analyzing your room with GPT-4o Vision..." />
           )}
         </section>
       )}
@@ -69,6 +78,9 @@ export default function DesignStudio() {
             <h2 className="text-lg font-semibold text-zinc-700">
               2 · Choose furniture to keep
             </h2>
+            <p className="text-xs text-zinc-400">
+              Unchecked items will be replaced with real products from Romanian stores.
+            </p>
             <FurnitureChecklist
               furniture={analysis.room_analysis.detected_furniture}
               keepList={keepList}
@@ -85,38 +97,97 @@ export default function DesignStudio() {
 
           <div className="space-y-2">
             <h2 className="text-lg font-semibold text-zinc-700">
-              4 · Any extra notes? <span className="text-zinc-400 font-normal">(optional)</span>
+              4 · Budget limit <span className="text-zinc-400 font-normal">(optional, RON)</span>
+            </h2>
+            <input
+              type="number"
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+              placeholder="e.g. 5000"
+              className="w-full rounded-xl border border-zinc-300 p-3 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-lg font-semibold text-zinc-700">
+              5 · Any extra notes? <span className="text-zinc-400 font-normal">(optional)</span>
             </h2>
             <textarea
               rows={3}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. I need a reading nook, prefer dark walls, have a large dog…"
+              placeholder="e.g. I need a reading nook, prefer dark walls, have a large dog..."
               className="w-full rounded-xl border border-zinc-300 p-3 text-sm text-zinc-700 focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
             />
           </div>
 
           <button
-            onClick={() => handleGenerate(style, notes)}
+            onClick={() =>
+              handleSourceProducts(
+                style,
+                notes,
+                budget ? parseFloat(budget) : undefined
+              )
+            }
             className="w-full rounded-xl bg-violet-600 text-white font-semibold py-4 text-base hover:bg-violet-700 active:scale-95 transition-all"
           >
-            Generate Redesign
+            Cauta Produse Reale
           </button>
         </section>
       )}
 
-      {/* Step 3 — Generating */}
-      {step === "generating" && (
-        <Spinner label="Designing your room and rendering with DALL-E 3… (30-60 sec)" />
+      {/* Step 3 — Sourcing (loading) */}
+      {step === "sourcing" && (
+        <Spinner label="Cautam produse reale pe site-urile romanesti (emag, jysk, vivre)... (30-90 sec)" />
       )}
 
-      {/* Step 4 — Done */}
+      {/* Step 4 — Product Preview (confirmation before render) */}
+      {step === "previewing" && sourcing && (
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold text-zinc-700">
+            Produse gasite — verifica inainte de a genera designul
+          </h2>
+          <ProductPreview
+            sourcing={sourcing}
+            onConfirm={handleConfirmAndRender}
+            onBack={handleBackToSelecting}
+          />
+        </section>
+      )}
+
+      {/* Step 5 — Rendering (loading) */}
+      {step === "rendering" && (
+        <Spinner label="Integram produsele in camera ta cu AI... (30-60 sec per produs)" />
+      )}
+
+      {/* Step 5b — Smart Replace in progress */}
+      {step === "replacing" && (
+        <div className="space-y-4">
+          {result && (
+            <div className="overflow-hidden rounded-2xl shadow-xl opacity-50">
+              <img
+                src={result.design_proposal.generated_image_url}
+                alt="Current design"
+                className="w-full object-cover"
+              />
+            </div>
+          )}
+          <Spinner label="Swapping product and re-rendering... (30-60 sec)" />
+        </div>
+      )}
+
+      {/* Step 6 — Done */}
       {step === "done" && result && (
         <section className="space-y-4">
           <h2 className="text-lg font-semibold text-zinc-700">
-            Your redesigned room
+            Your redesigned room — with real products
           </h2>
-          <ResultCard result={result} onReset={reset} />
+          <ResultCard
+            result={result}
+            onReset={reset}
+            onSwapProduct={handleSmartReplace}
+            isReplacing={false}
+          />
         </section>
       )}
 

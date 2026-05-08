@@ -11,7 +11,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
 from openai import OpenAI
 
-from app.models.schemas import DesignProposal, GraphState, JobStatus
+from app.models.schemas import DesignProposal, GraphState, JobStatus, MatchedProduct
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +66,14 @@ def _build_designer_prompt(state: GraphState) -> str:
     if state.furniture_to_keep:
         kept = state.furniture_to_keep
 
+    # Include real sourced products so DALL-E renders them by description
+    product_lines = []
+    for mp in state.sourced_products:
+        product_lines.append(
+            f"- {mp.slot}: {mp.name} ({mp.store}, {mp.price:.0f} RON)"
+        )
+    products_section = "\n".join(product_lines) if product_lines else "none (use generic furniture matching the style)"
+
     return f"""
 Room Analysis:
 - Room type: {analysis.room_type}
@@ -79,14 +87,18 @@ User Constraints:
 - Furniture to REPLACE/REMOVE: {', '.join(removed) or 'none specified'}
 - Additional notes: {state.user_notes or 'none'}
 
+REAL PRODUCTS TO FEATURE (from Romanian stores — describe these items accurately in the render):
+{products_section}
+
 Generate the DALL-E 3 prompt and design rationale as JSON.
+The design rationale should mention the real product names and their stores if available.
 """.strip()
 
 
 def interior_designer_node(state: GraphState) -> GraphState:
     """LangGraph node — mutates and returns state."""
     logger.info("Agent 2 — Interior Designer starting (job=%s)", state.job_id)
-    state.status = JobStatus.DESIGNING
+    state.status = JobStatus.RENDERING
 
     # ------------------------------------------------------------------ #
     # Step 1: GPT-4o generates the structured DALL-E prompt               #
@@ -133,11 +145,15 @@ def interior_designer_node(state: GraphState) -> GraphState:
         image_url = dalle_response.data[0].url
         revised_prompt = dalle_response.data[0].revised_prompt or image_prompt
 
+        total = sum(p.price for p in state.sourced_products)
         state.design_proposal = DesignProposal(
             image_prompt=image_prompt,
             design_rationale=rationale,
             generated_image_url=image_url,
             revised_prompt=revised_prompt,
+            matched_products=state.sourced_products,
+            suggestions=state.alternative_products,
+            total_price=total,
         )
         state.status = JobStatus.COMPLETED
         logger.info("Agent 2 done — image generated (job=%s)", state.job_id)

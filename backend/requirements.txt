@@ -6,8 +6,8 @@ python-multipart==0.0.9
 pydantic>=2.8.0
 pydantic-settings>=2.10.0
 
-# OpenAI SDK — 1.50+ for stable images.generate interface
-openai>=1.50.0
+# OpenAI SDK — 1.68+ required for Responses API with web_search_preview
+openai>=1.68.0
 
 # LangChain ecosystem — keep the entire stack on matching 1.x releases.
 # DO NOT pin these to 0.x — they are Python-3.12-incompatible.

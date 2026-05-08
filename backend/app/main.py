@@ -25,9 +25,9 @@ logger = logging.getLogger(__name__)
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="RoomRevive AI",
-        version="0.1.0",
-        description="AI-powered interior design MVP — LangGraph + GPT-4o + DALL-E 3",
+        title="AuraDesign RO",
+        version="0.2.0",
+        description="Real Product Staging — AI interior design with real Romanian products. LangGraph + GPT-4o + DALL-E 3 + Sourcing-First Multi-Agent System.",
         docs_url="/docs",
         redoc_url="/redoc",
     )
@@ -56,9 +56,9 @@ def create_app() -> FastAPI:
 
     @app.get("/health", tags=["ops"])
     async def health():
-        return {"status": "ok", "service": "roomrevive-ai"}
+        return {"status": "ok", "service": "auradesign-ro"}
 
-    logger.info("RoomRevive AI backend ready")
+    logger.info("AuraDesign RO backend ready")
     return app
 
 

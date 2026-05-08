@@ -5,8 +5,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "RoomRevive AI",
-  description: "AI-powered interior design",
+  title: "AuraDesign RO — Real Product Staging",
+  description: "AI-powered interior design with real Romanian products. Vizualizeaza Viitorul. Cumpara Local. Traieste Frumos.",
 };
 
 export default function RootLayout({
