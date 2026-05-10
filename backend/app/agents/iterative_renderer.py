@@ -140,14 +140,162 @@ The room layout, walls, floor, and windows must match the original exactly.
     return response.data[0].url, ""
 
 
+# ---------------------------------------------------------------------------
+# Slot → English placement mapping (fixes Romanian slot names being passed
+# directly to gpt-image-1 which doesn't understand them as locations)
+# ---------------------------------------------------------------------------
+_SLOT_TO_PLACEMENT: dict[str, tuple[str, bool]] = {
+    # (placement_description, is_replacement)
+    "sofa":         ("the main seating area, replacing the existing sofa", True),
+    "canapea":      ("the main seating area, replacing the existing sofa/couch", True),
+    "couch":        ("the main seating area, replacing the existing couch", True),
+    "chair":        ("replacing the existing chair in the room", True),
+    "scaun":        ("replacing the existing chair in the room", True),
+    "armchair":     ("replacing the armchair in the room", True),
+    "fotoliu":      ("replacing the armchair in the room", True),
+    "table":        ("the center of the room, replacing the existing table", True),
+    "masa":         ("the dining/coffee table area, replacing the existing table", True),
+    "coffee table": ("in front of the sofa, replacing the existing coffee table", True),
+    "desk":         ("the desk area, replacing the existing desk", True),
+    "birou":        ("the desk area, replacing the existing desk", True),
+    "bed":          ("the main sleeping area, replacing the existing bed", True),
+    "pat":          ("the main sleeping area, replacing the existing bed", True),
+    "wardrobe":     ("against the wall, replacing the existing wardrobe", True),
+    "dulap":        ("against the wall, replacing the existing wardrobe", True),
+    "cabinet":      ("against the wall, replacing the existing cabinet", True),
+    "shelf":        ("mounted on the wall, replacing the existing shelf", True),
+    "raft":         ("mounted on the wall, replacing the existing shelf", True),
+    # Additions (not replacements) — placed in empty spaces
+    "lamp":         ("in a corner or beside the sofa as a floor lamp", False),
+    "lampa":        ("in a corner or beside the sofa as a floor lamp", False),
+    "tablou":       ("hung on the largest empty wall, centered at eye level (approx. 150cm height), as framed wall art — apply correct wall perspective and lighting", False),
+    "painting":     ("hung on the largest empty wall, centered at eye level, as framed wall art — apply correct wall perspective and lighting", False),
+    "picture":      ("hung on the wall at eye level as framed wall art", False),
+    "artwork":      ("hung on the wall at eye level as framed wall art", False),
+    "mirror":       ("hung on the wall as a decorative mirror", False),
+    "oglinda":      ("hung on the wall as a decorative mirror", False),
+    "plant":        ("in a corner on the floor as an indoor potted plant", False),
+    "planta":       ("in a corner on the floor as an indoor potted plant", False),
+    "rug":          ("on the floor in the center of the seating area as a decorative rug", False),
+    "covor":        ("on the floor in the center of the seating area as a decorative rug", False),
+    "cushion":      ("on the sofa/chair as decorative cushions", False),
+    "perna":        ("on the sofa/chair as decorative cushions", False),
+}
+
+
+def _resolve_placement(product: MatchedProduct, matching_suggestion: object | None) -> tuple[str, bool]:
+    """
+    Returns (placement_description, is_replacement) for building the edit prompt.
+    Priority: matching suggestion > slot lookup table > generic fallback.
+    """
+    slot_lower = product.slot.lower().strip()
+
+    if matching_suggestion is not None:
+        is_repl = getattr(matching_suggestion, "is_replacement", True)
+        placement = getattr(matching_suggestion, "placement", slot_lower)
+        item_type = getattr(matching_suggestion, "item_type", slot_lower)
+        if is_repl:
+            return f"replacing the existing {item_type} — position: {placement}", True
+        else:
+            return f"adding to {placement}", False
+
+    # Exact slot match
+    if slot_lower in _SLOT_TO_PLACEMENT:
+        return _SLOT_TO_PLACEMENT[slot_lower]
+
+    # Partial match (e.g. "dining chair" → "chair")
+    for key, value in _SLOT_TO_PLACEMENT.items():
+        if key in slot_lower or slot_lower in key:
+            return value
+
+    # Generic fallback — assume replacement
+    return f"replacing the existing {product.slot} in the room", True
+
+
+def _preservation_block(placed_so_far: list[str]) -> str:
+    """Returns a preservation clause listing all items already placed in prior steps."""
+    if not placed_so_far:
+        return ""
+    lines = "\n".join(f"  • {item}" for item in placed_so_far)
+    return (
+        f"\n\nCRITICAL — ALREADY PLACED IN PREVIOUS STEPS (preserve their exact appearance, position, and quality):\n"
+        f"{lines}\n"
+        f"These items must look IDENTICAL to how they appear in the input image. Do NOT degrade, blur, recolor, or alter them in any way."
+    )
+
+
+def _build_prompt_with_image(
+    placement: str,
+    is_replacement: bool,
+    product_name: str,
+    placed_so_far: list[str] | None = None,
+) -> str:
+    """Build the gpt-image-1 edit prompt when a product reference image is provided."""
+    if is_replacement:
+        action = (
+            f"REPLACE the existing furniture/object at: {placement}. "
+            f"Use the EXACT product shown in the second image — replicate its shape, color, material and style faithfully. "
+            f"Match the room's perspective, lighting and shadows."
+        )
+    else:
+        action = (
+            f"ADD the product shown in the second image to: {placement}. "
+            f"Replicate the product's exact appearance from the reference image. "
+            f"Integrate it naturally — match the room's perspective, scale, lighting and shadows."
+        )
+
+    preservation = _preservation_block(placed_so_far or [])
+
+    return (
+        f"Photo-realistic room editing task.\n\n"
+        f"YOUR ONLY TASK: {action}\n\n"
+        f"STRICT RULES — do NOT violate any of these:\n"
+        f"- Do NOT change any other object, furniture piece, wall, floor, ceiling, window, door, or light source.\n"
+        f"- Do NOT recolor, reposition, or alter anything outside the target area.\n"
+        f"- The rest of the room must look 100% identical to the input image.\n"
+        f"- The placed product must look photorealistic and physically plausible in the scene.\n"
+        f"- Maintain full photographic sharpness and detail quality throughout the entire image.\n"
+        f"- Product name for reference: {product_name}"
+        f"{preservation}"
+    )
+
+
+def _build_prompt_text_only(
+    placement: str,
+    is_replacement: bool,
+    product_name: str,
+    placed_so_far: list[str] | None = None,
+) -> str:
+    """Build the gpt-image-1 edit prompt when NO product reference image is available."""
+    if is_replacement:
+        action = (
+            f"REPLACE the existing furniture at: {placement} "
+            f"with a photorealistic {product_name}. "
+            f"Match the room's lighting, perspective and style."
+        )
+    else:
+        action = (
+            f"ADD a photorealistic {product_name} to: {placement}. "
+            f"Integrate it naturally with correct perspective, scale, lighting and shadows."
+        )
+
+    preservation = _preservation_block(placed_so_far or [])
+
+    return (
+        f"Photo-realistic room editing task.\n\n"
+        f"YOUR ONLY TASK: {action}\n\n"
+        f"STRICT RULES:\n"
+        f"- Do NOT change any other object, furniture, wall, floor, ceiling, window, or light.\n"
+        f"- Everything outside the target area must remain 100% identical to the input image.\n"
+        f"- The result must look photorealistic and physically plausible.\n"
+        f"- Maintain full photographic sharpness and detail quality throughout the entire image."
+        f"{preservation}"
+    )
+
+
 def iterative_renderer_node(state: GraphState) -> GraphState:
     """
     LangGraph node — iteratively applies each sourced product to the room image.
-    
-    For each product (with its associated suggestion details):
-    1. Send: current room image + product image
-    2. Prompt: "Don't change layout at all, only [suggestion.description] with this product"
-    3. Iterate until all products applied, then add decor
     """
     logger.info("Iterative Renderer starting (job=%s)", state.job_id)
     state.status = JobStatus.RENDERING
@@ -157,122 +305,71 @@ def iterative_renderer_node(state: GraphState) -> GraphState:
     products = state.sourced_products
     style = state.desired_style.value
 
-    # Start with the original room image
     current_image_b64 = state.image_base64
     render_steps: list[str] = []
     intermediate_images: list[str] = []
     intermediate_products: list[str] = []
+    placed_so_far: list[str] = []  # tracks placed items for quality preservation prompts
 
-    # Store original image as first intermediate
     intermediate_images.append(current_image_b64)
     intermediate_products.append("Original room")
 
     try:
-        # ------------------------------------------------------------ #
-        # Iterative rendering: apply each sourced product                #
-        # ------------------------------------------------------------ #
         for iteration, product in enumerate(products, start=1):
             logger.info(
-                "Iterative Renderer — Iteration %d/%d: applying %s (job=%s)",
-                iteration, len(products), product.name, state.job_id,
+                "Iterative Renderer — Iteration %d/%d: applying %s (slot=%s, job=%s)",
+                iteration, len(products), product.name, product.slot, state.job_id,
             )
 
-            # Find the matching suggestion for detailed context
+            # Match suggestion by item_type first (more reliable than placement string match)
             matching_suggestion = None
+            slot_lower = product.slot.lower()
             for sugg in plan.suggestions:
-                if sugg.placement.lower() in product.slot.lower() or product.slot.lower() in sugg.placement.lower():
+                item_type_lower = sugg.item_type.lower()
+                # Check item_type overlap with slot
+                if (item_type_lower in slot_lower or slot_lower in item_type_lower or
+                        any(word in slot_lower for word in item_type_lower.split() if len(word) >= 4)):
                     matching_suggestion = sugg
                     break
 
-            if not matching_suggestion:
-                # Fallback: use product description
-                specific_instruction = product.description
-                placement = product.slot
-            else:
-                # Use exact suggestion details for the prompt
-                specific_instruction = (
-                    f"{matching_suggestion.item_type}: {matching_suggestion.description} "
-                    f"({', '.join(matching_suggestion.colors)}). "
-                    f"Details: {matching_suggestion.specific_details}. "
-                    f"Style: {matching_suggestion.style_vibe}"
-                )
-                placement = matching_suggestion.placement
+            placement, is_replacement = _resolve_placement(product, matching_suggestion)
+            logger.info(
+                "  → placement: %s | replacement: %s (job=%s)",
+                placement, is_replacement, state.job_id,
+            )
 
-            # Use product image if available
             if product.image_base64:
-                prompt = (
-                    f"STRICTLY INPAINTING ONLY: ABSOLUTELY NO CHANGES to the room image, with the SINGLE EXCEPTION of placing the PROVIDED product image at {placement}.\n\n"
-                    f"FORBIDDEN TO ALTER: The room layout, walls, floor, ceiling, windows, doors, existing furniture, textures, colors, or lighting must remain 100% IDENTICAL to the original image.\n\n"
-                    f"NOTHING NOTHING ELSE: Do not adjust, modify, move, recolor, or change ANY detail or object other than the product being placed. Treat all other areas of the image as if they are carved in stone. Your only task is a seamless inpainting of the provided product into the specified area."
-                )
-
+                prompt = _build_prompt_with_image(placement, is_replacement, product.name, placed_so_far)
                 try:
                     result_b64 = _edit_image_with_product(
                         client, current_image_b64, product.image_base64, prompt
                     )
                     current_image_b64 = result_b64
-                    # Store intermediate image
                     intermediate_images.append(current_image_b64)
                     intermediate_products.append(f"{product.name} ({product.store})")
-                    logger.info(
-                        "Iteration %d done — applied %s (job=%s)",
-                        iteration, product.name, state.job_id,
-                    )
-                    render_steps.append(f"Applied: {product.name} ({product.store}) - {placement}")
+                    render_steps.append(f"Applied: {product.name} ({product.store}) — {placement}")
+                    placed_so_far.append(f"{product.name} — {placement}")
+                    logger.info("Iteration %d done — applied %s (job=%s)", iteration, product.name, state.job_id)
                 except Exception as exc:
                     logger.warning(
                         "Product edit failed at iteration %d: %s (job=%s). Continuing...",
                         iteration, exc, state.job_id,
                     )
             else:
-                # No product image — use text-only edit with the specific instruction
-                prompt = (
-                    f"STRICTLY INPAINTING ONLY: ABSOLUTELY NO CHANGES to the room image, with the SINGLE EXCEPTION of adding this item at {placement}: {product.name}.\n\n"
-                    f"FORBIDDEN TO ALTER: The room layout, walls, floor, ceiling, windows, doors, existing furniture, textures, colors, or lighting must remain 100% IDENTICAL to the original image.\n\n"
-                    f"NOTHING NOTHING ELSE: Do not adjust, modify, move, recolor, or change ANY detail or object other than the item being placed. Treat all other areas of the image as if they are carved in stone. Your only task is a seamless inpainting of the specified item into the target area."
-                )
-
+                prompt = _build_prompt_text_only(placement, is_replacement, product.name, placed_so_far)
                 try:
-                    result_b64 = _edit_image_text_only(
-                        client, current_image_b64, prompt
-                    )
+                    result_b64 = _edit_image_text_only(client, current_image_b64, prompt)
                     current_image_b64 = result_b64
-                    # Store intermediate image
                     intermediate_images.append(current_image_b64)
-                    intermediate_products.append(f"{product.name}")
-                    logger.info(
-                        "Iteration %d done (text-only) — applied %s (job=%s)",
-                        iteration, product.name, state.job_id,
-                    )
-                    render_steps.append(f"Applied: {product.name} - {placement}")
+                    intermediate_products.append(product.name)
+                    render_steps.append(f"Applied (text-only): {product.name} — {placement}")
+                    placed_so_far.append(f"{product.name} — {placement}")
+                    logger.info("Iteration %d done (text-only) — applied %s (job=%s)", iteration, product.name, state.job_id)
                 except Exception as exc:
                     logger.warning(
                         "Text-only edit failed at iteration %d: %s (job=%s). Continuing...",
                         iteration, exc, state.job_id,
                     )
-
-        # ------------------------------------------------------------ #
-        # Final step: Add decor suggestions (from design plan)           #
-        # ------------------------------------------------------------ #
-        if plan.overall_vision:
-            decor_prompt = (
-                f"STRICTLY CONSERVATIVE DESIGN FINISH: Do NOT change, move, or modify ANY existing objects, furniture, or structures in the image.\n\n"
-                f"FORBIDDEN TO ALTER: The room layout, walls, floor, ceiling, windows, doors, lighting, or ANY of the previously placed products must remain EXACTLY as they are.\n\n"
-                f"SINGLE TASK: Only add new, subtle decorative elements that align with the provided design vision, placing them ONLY in empty spaces, on surfaces, or hanging from the ceiling without obscuring or changing anything already present. Treat all existing elements as permanent and untouchable."
-            )
-
-            try:
-                result_b64 = _edit_image_text_only(
-                    client, current_image_b64, decor_prompt
-                )
-                current_image_b64 = result_b64
-                # Store final intermediate image
-                intermediate_images.append(current_image_b64)
-                intermediate_products.append("Final touches & design vision")
-                logger.info("Final step done — added design vision touches (job=%s)", state.job_id)
-                render_steps.append("Final touches: Design vision")
-            except Exception as exc:
-                logger.warning("Decor edit failed (continuing without): %s", exc)
 
         # ------------------------------------------------------------ #
         # Build final proposal                                          #

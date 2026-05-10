@@ -44,8 +44,11 @@ export default function ImageDropzone({ onFile, disabled }: Props) {
       className={`
         relative flex flex-col items-center justify-center
         w-full min-h-64 rounded-2xl border-2 border-dashed
-        transition-colors cursor-pointer
-        ${dragOver ? "border-violet-500 bg-violet-50" : "border-zinc-300 bg-zinc-50 hover:border-violet-400"}
+        transition-all duration-200 cursor-pointer
+        ${dragOver
+          ? "border-brand-light bg-brand-lighter/40"
+          : "border-brand-lighter bg-white hover:border-brand-light hover:bg-brand-bg"
+        }
         ${disabled ? "opacity-50 pointer-events-none" : ""}
       `}
     >
@@ -53,19 +56,22 @@ export default function ImageDropzone({ onFile, disabled }: Props) {
         <img
           src={preview}
           alt="Room preview"
-          className="max-h-72 rounded-xl object-contain"
+          className="max-h-72 rounded-xl object-contain p-2"
         />
       ) : (
         <div className="flex flex-col items-center gap-3 p-8 text-center">
-          <svg className="w-12 h-12 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-          </svg>
-          <p className="text-sm font-medium text-zinc-600">
-            Drop your room photo here, or{" "}
-            <span className="text-violet-600 underline">browse</span>
-          </p>
-          <p className="text-xs text-zinc-400">JPEG, PNG, WebP — max 10 MB</p>
+          <div className="w-14 h-14 rounded-2xl bg-brand-lighter flex items-center justify-center">
+            <svg className="w-7 h-7 text-brand-mid" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-brand-dark">
+              Trage fotografia aici sau{" "}
+              <span className="text-brand-mid underline">selecteaza</span>
+            </p>
+            <p className="text-xs text-brand-mid mt-1">JPEG, PNG, WebP · max 10 MB</p>
+          </div>
         </div>
       )}
       <input

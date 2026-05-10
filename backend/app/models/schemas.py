@@ -20,6 +20,12 @@ class DesignStyle(str, Enum):
     MINIMALIST = "Minimalist"
     LUXURY = "Luxury"
     SCANDINAVIAN = "Scandinavian"
+    JAPANDI = "Japandi"
+    INDUSTRIAL = "Industrial"
+    BOHEMIAN = "Bohemian"
+    ART_DECO = "Art Deco"
+    COASTAL = "Coastal"
+    TRADITIONAL = "Traditional"
     GAMING_ROOM = "Gaming Room"
 
 
@@ -226,6 +232,17 @@ class SmartReplaceRequest(BaseModel):
     """Request to swap a single product in the current design."""
     slot: str
     new_product_id: str
+
+
+class CustomProductRequest(BaseModel):
+    """User-provided product to add to the sourced products list."""
+    name: str = "Produs Custom"
+    url: str
+    slot: str
+    price: float = 0.0
+    currency: str = "RON"
+    store: str = "Custom"
+    image_url: str = ""
 
 
 class AnalysisResponse(BaseModel):

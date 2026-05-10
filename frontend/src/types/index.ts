@@ -3,6 +3,12 @@ export type DesignStyle =
   | "Minimalist"
   | "Luxury"
   | "Scandinavian"
+  | "Japandi"
+  | "Industrial"
+  | "Bohemian"
+  | "Art Deco"
+  | "Coastal"
+  | "Traditional"
   | "Gaming Room";
 
 export type JobStatus =
