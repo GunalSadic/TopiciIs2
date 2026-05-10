@@ -432,13 +432,15 @@ def _web_search_product(client: "OpenAI", suggestion: Any, style: str) -> dict |
     """
     prompt = f"""Search Romanian online furniture stores (emag.ro, jysk.ro, vivre.ro, ikea.ro, mobexpert.ro, somproduct.ro) for this product:
 
+DESIGN STYLE (MOST IMPORTANT): {style}
 ITEM: {suggestion.item_type.upper()}
 DESCRIPTION: {suggestion.description}
 COLORS: {', '.join(suggestion.colors)}
-STYLE: {suggestion.style_vibe}
+VIBE: {suggestion.style_vibe}
 DETAILS: {suggestion.specific_details}
 ROMANIAN KEYWORDS: {', '.join(suggestion.search_keywords)}
 
+The product MUST match the "{style}" design style. Do not return generic or mismatched items.
 Find ONE real product that matches this description. Focus on the product PAGE URL (not image URL).
 Return ONLY valid JSON (no markdown, no extra text):
 {{

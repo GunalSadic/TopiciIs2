@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 
 from app.models.schemas import (
     AnalysisResponse,
+    CustomProductRequest,
     DesignRequest,
     DesignResponse,
     DesignStyle,
@@ -351,6 +352,109 @@ async def smart_replace(request: SmartReplaceRequest, job_id: UUID):
 # ---------------------------------------------------------------------------
 # Market Agent Routes — Product Search & Recommendations
 # ---------------------------------------------------------------------------
+
+@router.post(
+    "/add-custom-product",
+    summary="Add a user-provided product URL to the sourced products list",
+    responses={404: {"model": ErrorResponse}},
+)
+async def add_custom_product(request: CustomProductRequest, job_id: UUID):
+    """
+    Lets the user add a product they found on any website.
+    Accepts name, URL, slot, and optional price — no scraping required.
+    The product is appended to state.sourced_products so the renderer uses it.
+    """
+    state = await job_store.get(job_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+
+    from uuid import uuid4
+    product = MatchedProduct(
+        product_id=f"custom-{uuid4().hex[:8]}",
+        name=request.name,
+        category=request.slot,
+        price=request.price,
+        currency=request.currency,
+        image_url=request.image_url,
+        product_url=request.url,
+        store=request.store,
+        slot=request.slot,
+        description=f"Produs adaugat manual: {request.url}",
+    )
+
+    # Try to fetch og:image from the product URL (reuses market_agent scraping logic)
+    import asyncio
+    try:
+        from app.agents.market_agent import _download_product_image
+        image_base64 = await asyncio.to_thread(
+            _download_product_image, request.image_url, request.url
+        )
+        product.image_base64 = image_base64
+    except Exception as exc:
+        logger.warning("Could not fetch image for custom product %s: %s", request.url, exc)
+
+    state.sourced_products.append(product)
+    await job_store.save(state)
+
+    return {"status": "ok", "product_id": product.product_id, "image_base64": product.image_base64 or None}
+
+
+@router.post(
+    "/find-more-products",
+    response_model=SourcingResponse,
+    summary="Re-run Market Agent and append new products without removing existing ones",
+    responses={404: {"model": ErrorResponse}, 500: {"model": ErrorResponse}},
+)
+async def find_more_products(job_id: UUID):
+    """
+    Re-runs the Market Agent to find additional products.
+    Existing sourced products are preserved; only genuinely new products are appended.
+    """
+    state = await job_store.get(job_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+
+    existing_ids = {p.product_id for p in state.sourced_products}
+    existing_products = list(state.sourced_products)
+
+    # Clear sourced list so market agent sources fresh alternatives
+    state.sourced_products = []
+
+    from app.agents.market_agent import market_sourcing_node
+    state = market_sourcing_node(state)
+
+    # Keep only products that weren't already in the list
+    new_products = [p for p in state.sourced_products if p.product_id not in existing_ids]
+    state.sourced_products = existing_products + new_products
+    await job_store.save(state)
+
+    return SourcingResponse(
+        job_id=state.job_id,
+        room_analysis=state.room_analysis,
+        design_plan=state.design_plan,
+        sourced_products=state.sourced_products,
+        status=state.status,
+    )
+
+
+@router.delete(
+    "/remove-sourced-product",
+    summary="Remove a product from the sourced products list",
+    responses={404: {"model": ErrorResponse}},
+)
+async def remove_sourced_product(job_id: UUID, product_id: str):
+    """Remove a specific product from state.sourced_products by product_id."""
+    state = await job_store.get(job_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+
+    state.sourced_products = [
+        p for p in state.sourced_products if p.product_id != product_id
+    ]
+    await job_store.save(state)
+
+    return {"status": "ok"}
+
 
 @router.get(
     "/products",

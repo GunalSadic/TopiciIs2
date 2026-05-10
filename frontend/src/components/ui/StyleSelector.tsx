@@ -2,12 +2,18 @@
 
 import type { DesignStyle } from "@/types";
 
-const STYLES: { value: DesignStyle; label: string; emoji: string; desc: string }[] = [
-  { value: "Modern",       label: "Modern",       emoji: "◻️", desc: "Clean lines, neutral tones" },
-  { value: "Minimalist",   label: "Minimalist",   emoji: "○", desc: "Less is more" },
-  { value: "Luxury",       label: "Luxury",       emoji: "✦", desc: "Rich materials & drama" },
-  { value: "Scandinavian", label: "Scandinavian", emoji: "❄", desc: "Warm & functional hygge" },
-  { value: "Gaming Room",  label: "Gaming Room",  emoji: "⚡", desc: "RGB & ergonomic setup" },
+const STYLES: { value: DesignStyle; label: string; symbol: string; desc: string }[] = [
+  { value: "Modern",       label: "Modern",       symbol: "◻", desc: "Linii clare, tonuri neutre" },
+  { value: "Minimalist",   label: "Minimalist",   symbol: "○", desc: "Mai putin, mai mult" },
+  { value: "Luxury",       label: "Luxury",       symbol: "✦", desc: "Materiale bogate, dramatism" },
+  { value: "Scandinavian", label: "Scandinavian", symbol: "❄", desc: "Hygge cald, functional" },
+  { value: "Japandi",      label: "Japandi",      symbol: "⌬", desc: "Japonez + scandinav" },
+  { value: "Industrial",   label: "Industrial",   symbol: "⬡", desc: "Metal, beton, rustic" },
+  { value: "Bohemian",     label: "Bohemian",     symbol: "❋", desc: "Eclectic, texturi, culori" },
+  { value: "Art Deco",     label: "Art Deco",     symbol: "◈", desc: "Geometric, auriu, opulent" },
+  { value: "Coastal",      label: "Coastal",      symbol: "◌", desc: "Albastru, alb, natural" },
+  { value: "Traditional",  label: "Traditional",  symbol: "◉", desc: "Clasic, elegant, timpuriu" },
+  { value: "Gaming Room",  label: "Gaming Room",  symbol: "⚡", desc: "RGB, ergonomic, tech" },
 ];
 
 interface Props {
@@ -17,23 +23,32 @@ interface Props {
 
 export default function StyleSelector({ selected, onChange }: Props) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
       {STYLES.map((s) => (
         <button
           key={s.value}
           onClick={() => onChange(s.value)}
           className={`
-            flex flex-col items-center gap-1 rounded-xl border-2 p-4 text-center
-            transition-all duration-150 hover:border-violet-400
-            ${selected === s.value
-              ? "border-violet-600 bg-violet-50 shadow-sm"
-              : "border-zinc-200 bg-white"
+            flex flex-col items-center gap-1 rounded-xl border-2 px-2 py-3 text-center
+            transition-all duration-150
+            ${
+              selected === s.value
+                ? "border-brand-light bg-brand-lighter shadow-sm"
+                : "border-brand-lighter bg-white hover:border-brand-light/60 hover:shadow-sm"
             }
           `}
         >
-          <span className="text-2xl">{s.emoji}</span>
-          <span className="text-sm font-semibold text-zinc-800">{s.label}</span>
-          <span className="text-xs text-zinc-400">{s.desc}</span>
+          <span
+            className={`text-lg font-mono ${
+              selected === s.value ? "text-brand-dark" : "text-brand-mid"
+            }`}
+          >
+            {s.symbol}
+          </span>
+          <span className="text-xs font-semibold text-brand-dark leading-tight">
+            {s.label}
+          </span>
+          <span className="text-[10px] text-brand-mid leading-tight">{s.desc}</span>
         </button>
       ))}
     </div>

@@ -1,17 +1,15 @@
-import DesignStudio from "@/components/DesignStudio";
 import LandingPage from "@/components/LandingPage";
 
 export const metadata = {
   title: "AuraDesign RO — Real Product Staging",
   description:
-    "Upload a photo of your room. AI sources real furniture from Romanian stores, renders it in your space, and lets you swap products with one click.",
+    "Incarca o poza a camerei tale. AI-ul cauta mobila reala din magazinele romanesti si genereaza un design complet cu preturi si linkuri.",
 };
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-gradient-to-b from-white to-zinc-50">
+    <main>
       <LandingPage />
-      <DesignStudio />
     </main>
   );
 }

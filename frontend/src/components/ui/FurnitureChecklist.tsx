@@ -8,54 +8,57 @@ interface Props {
   onToggle: (name: string) => void;
 }
 
-const conditionColor: Record<string, string> = {
-  good: "bg-emerald-100 text-emerald-700",
-  fair: "bg-amber-100 text-amber-700",
-  poor: "bg-red-100 text-red-700",
+const conditionBadge: Record<string, string> = {
+  good: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  fair: "bg-brand-lighter text-brand-mid border-brand-light",
+  poor: "bg-red-50 text-red-600 border-red-200",
 };
 
 export default function FurnitureChecklist({ furniture, keepList, onToggle }: Props) {
   return (
-    <div className="space-y-2">
-      <p className="text-sm font-medium text-zinc-500 uppercase tracking-wide">
-        Detected furniture — select what to keep
-      </p>
-      <ul className="divide-y divide-zinc-100 rounded-xl border border-zinc-200 overflow-hidden">
-        {furniture.map((item) => (
-          <li
-            key={item.name}
-            onClick={() => onToggle(item.name)}
-            className={`
-              flex items-center justify-between px-4 py-3 cursor-pointer
-              hover:bg-zinc-50 transition-colors
-              ${keepList.has(item.name) ? "bg-violet-50" : "bg-white"}
-            `}
-          >
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                checked={keepList.has(item.name)}
-                onChange={() => onToggle(item.name)}
-                className="accent-violet-600 w-4 h-4"
-                onClick={(e) => e.stopPropagation()}
-              />
-              <div>
-                <span className="text-sm font-medium text-zinc-800 capitalize">
-                  {item.name}
-                </span>
-                {item.estimated_position && (
-                  <span className="ml-2 text-xs text-zinc-400">
-                    ({item.estimated_position})
-                  </span>
-                )}
-              </div>
+    <ul className="divide-y divide-brand-lighter rounded-xl border border-brand-lighter overflow-hidden bg-white">
+      {furniture.map((item) => (
+        <li
+          key={item.name}
+          onClick={() => onToggle(item.name)}
+          className={`flex items-center justify-between px-4 py-3 cursor-pointer transition-colors ${
+            keepList.has(item.name) ? "bg-brand-lighter/50" : "hover:bg-brand-bg"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                keepList.has(item.name)
+                  ? "bg-brand-dark border-brand-dark"
+                  : "border-brand-light bg-white"
+              }`}
+            >
+              {keepList.has(item.name) && (
+                <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              )}
             </div>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${conditionColor[item.condition] ?? ""}`}>
-              {item.condition}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
+            <div>
+              <span className="text-sm font-medium text-brand-dark capitalize">
+                {item.name}
+              </span>
+              {item.estimated_position && (
+                <span className="ml-2 text-xs text-brand-mid">
+                  ({item.estimated_position})
+                </span>
+              )}
+            </div>
+          </div>
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+              conditionBadge[item.condition] ?? "bg-brand-bg text-brand-mid border-brand-lighter"
+            }`}
+          >
+            {item.condition}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
